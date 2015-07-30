@@ -297,7 +297,7 @@ updateGeom() {
     std::vector<float> vertex, varying;
 
     int nverts = 0;
-    int stride = (g_shadingMode == kShadingInterleavedVaryingColor ? 7 : 3);
+    int stride = (g_shadingMode == kShadingInterleavedVaryingColor ? 8 : 4);
 
     if (g_objAnim and g_currentShape==0) {
 
@@ -351,6 +351,7 @@ updateGeom() {
             vertex.push_back( p[0]*ct + p[1]*st);
             vertex.push_back(-p[0]*st + p[1]*ct);
             vertex.push_back( p[2]);
+            vertex.push_back(1.0f);
             if (g_shadingMode == kShadingInterleavedVaryingColor) {
                 vertex.push_back(p[1]);
                 vertex.push_back(p[2]);
@@ -456,10 +457,12 @@ rebuildMesh() {
     bits.set(Osd::MeshEndCapGregoryBasis, g_endCap == kEndCapGregoryBasis);
     bits.set(Osd::MeshEndCapLegacyGregory, g_endCap == kEndCapLegacyGregory);
 
-    int numVertexElements = 3;
-    int numVaryingElements =
-        (g_shadingMode == kShadingVaryingColor or interleaveVarying) ? 4 : 0;
-
+    int numVertexElements = 4;
+    int numVaryingElements;
+    if(g_shadingMode == kShadingInterleavedVaryingColor)
+        numVertexElements += 4;
+    else if(g_shadingMode == kShadingVaryingColor) 
+        numVaryingElements = 4;
 
     if (kernel == kCPU) {
         g_mesh = new Osd::Mesh<Osd::CpuGLVertexBuffer,
@@ -605,16 +608,16 @@ rebuildMesh() {
     glEnableVertexAttribArray(0);
 
     if (g_shadingMode == kShadingVaryingColor) {
-        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof (GLfloat) * 3, 0);
+        glVertexAttribPointer(0, 4, GL_FLOAT, GL_FALSE, sizeof (GLfloat) * 4, 0);
         glBindBuffer(GL_ARRAY_BUFFER, g_mesh->BindVaryingBuffer());
         glEnableVertexAttribArray(1);
         glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, sizeof (GLfloat) * 4, 0);
     } else if (g_shadingMode == kShadingInterleavedVaryingColor) {
-        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof (GLfloat) * 7, 0);
+        glVertexAttribPointer(0, 4, GL_FLOAT, GL_FALSE, sizeof (GLfloat) * 8, 0);
         glEnableVertexAttribArray(1);
-        glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, sizeof (GLfloat) * 7, (void*)(sizeof (GLfloat) * 3));
+        glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, sizeof (GLfloat) * 8, (void*)(sizeof (GLfloat) * 3));
     } else {
-        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof (GLfloat) * 3, 0);
+        glVertexAttribPointer(0, 4, GL_FLOAT, GL_FALSE, sizeof (GLfloat) * 4, 0);
         glDisableVertexAttribArray(1);
     }
 
@@ -990,7 +993,7 @@ bindProgram(Effect effect,
     if (patch.GetDescriptor().GetType() == Descriptor::GREGORY or
         patch.GetDescriptor().GetType() == Descriptor::GREGORY_BOUNDARY) {
         int maxValence = g_mesh->GetMaxValence();
-        int numElements = (g_shadingMode == kShadingInterleavedVaryingColor ? 7 : 3);
+        int numElements = (g_shadingMode == kShadingInterleavedVaryingColor ? 8 : 4);
         effectDesc.maxValence = maxValence;
         effectDesc.numElements = numElements;
         effectDesc.effect.singleCreasePatch = 0;
@@ -1154,7 +1157,7 @@ display() {
         glEnable(GL_CULL_FACE);
 
     // draw the control mesh
-    int stride = g_shadingMode == kShadingInterleavedVaryingColor ? 7 : 3;
+    int stride = g_shadingMode == kShadingInterleavedVaryingColor ? 8 : 4;
     g_controlMeshDisplay.Draw(vbo, stride*sizeof(float),
                               g_transformData.ModelViewProjectionMatrix);
 

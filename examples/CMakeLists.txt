@@ -43,6 +43,9 @@ if (NOT NO_OPENGL)
             add_subdirectory(glPtexViewer)
         endif()
 
+#       if (${EMBREE_LOCATION})
+            add_subdirectory(embreeViewer)
+  #      endif()
     else()
 
         set(MISSING "")
