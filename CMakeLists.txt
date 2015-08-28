@@ -146,7 +146,7 @@ if (CMAKE_COMPILER_IS_GNUCC OR CMAKE_COMPILER_IS_CLANGCC OR CMAKE_COMPILER_IS_IC
     # Turn on all warnings
     if(CMAKE_COMPILER_IS_ICC)
         list(APPEND OSD_COMPILER_FLAGS -w2 -wd1572 -wd1418 -wd981 -wd383 -wd193 -wd444)
-        #list(APPEND OSD_COMPILER_FLAGS -xMIC_AVX512)
+        list(APPEND OSD_COMPILER_FLAGS -xMIC_AVX512)
     else()
         list(APPEND OSD_COMPILER_FLAGS -Wall -Wextra)
     endif()
