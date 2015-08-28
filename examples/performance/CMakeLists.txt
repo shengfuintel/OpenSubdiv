@@ -22,11 +22,33 @@
 #   language governing permissions and limitations under the Apache License.
 #
 
+# *** embreeViewer ***
+add_definitions("-std=c++11")
 
-remove_definitions(-xMIC_AVX512)
-
-_add_executable(stringify
-    main.cpp
+include_directories(
+    "${OPENSUBDIV_INCLUDE_DIR}"
 )
 
-install(TARGETS stringify DESTINATION ${CMAKE_BINDIR_BASE})
+list(APPEND PLATFORM_LIBRARIES
+    "${OSD_LINK_TARGET}"
+)
+
+include_directories("${EMBREE_LOCATION}/include")
+include_directories("${TBB_LOCATION}/include")
+
+include_directories("${CMAKE_CURRENT_BINARY_DIR}")
+
+_add_executable(performance
+    performance.cpp embreeRender.cpp 
+    "${SHADER_FILES}"
+    "${INC_FILES}"
+    $<TARGET_OBJECTS:regression_common_obj>
+    $<TARGET_OBJECTS:regression_far_utils_obj>
+)
+
+target_link_libraries(performance
+    ${PLATFORM_LIBRARIES}
+   "${EMBREE_LOCATION}/lib/libembree.so.2"
+)
+
+install(TARGETS performance DESTINATION "${CMAKE_BINDIR_BASE}")
