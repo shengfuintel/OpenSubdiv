@@ -297,7 +297,7 @@ public:
         return EvalPatches(srcBuffer->BindCpuBuffer(), srcDesc,
                            dstBuffer->BindCpuBuffer(), dstDesc,
                            numPatchCoords,
-                           (const PatchCoord*)patchCoords->BindCpuBuffer(),
+                           (const PatchCoord*)patchCoords,
                            patchTable->GetPatchArrayBuffer(),
                            patchTable->GetPatchIndexBuffer(),
                            patchTable->GetPatchParamBuffer());
@@ -368,7 +368,7 @@ public:
                            duBuffer->BindCpuBuffer(),  duDesc,
                            dvBuffer->BindCpuBuffer(),  dvDesc,
                            numPatchCoords,
-                           (const PatchCoord*)patchCoords->BindCpuBuffer(),
+                           (const PatchCoord*)patchCoords,
                            patchTable->GetPatchArrayBuffer(),
                            patchTable->GetPatchIndexBuffer(),
                            patchTable->GetPatchParamBuffer());

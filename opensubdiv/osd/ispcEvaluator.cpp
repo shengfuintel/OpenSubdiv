@@ -162,29 +162,17 @@ public:
         // Since memory alignment in ISPC may be different from C++,
         // we use the assignment for each field instead of the assignment for 
         // the whole struct
-        ispc::BufferDescriptor ispcSrcDesc;
-        ispcSrcDesc.offset = _srcDesc.offset;
+        ispc::BufferDescriptor ispcSrcDesc, ispcDstDesc, ispcDuDesc, ispcDvDesc;
         ispcSrcDesc.length = _srcDesc.length;
         ispcSrcDesc.stride = _srcDesc.stride;                                           
-                          
-        uint i = r.begin();
-        
-        ispc::BufferDescriptor ispcDstDesc;
-        ispcDstDesc.offset = _dstDesc.offset + _dstDesc.offset + i * _dstDesc.stride;
+                                       
         ispcDstDesc.length = _dstDesc.length;
         ispcDstDesc.stride = _dstDesc.stride;
     
-        while (i < r.end()) {
-            // the patch coordinates are sorted by patch handle
-            // the following code searches the coordinates that
-            // belongs to the same patch so that they can be evalauated 
-            // with ISPC
-            int nCoord = 1;
-            Far::PatchTable::PatchHandle handle = _patchCoords[i].handle;
-            while(i + nCoord < r.end() && 
-                  handle == _patchCoords[i + nCoord].handle )
-                  nCoord ++;
-              
+        for (uint i=r.begin(); i < r.end(); i++) {
+            ispcDstDesc.offset = _dstDesc.offset + _patchCoords[i].offset * _dstDesc.stride;         
+            
+            const Far::PatchTable::PatchHandle &handle = _patchCoords[i].handle;
             PatchArray const &array = _patchArrays[handle.arrayIndex];
             int patchType = array.GetPatchType();
             Far::PatchParam const & param = _patchParamBuffer[handle.patchIndex];
@@ -193,12 +181,13 @@ public:
 
             const int *cvs = &_patchIndexBuffer[array.indexBase + handle.vertIndex];
 
+            int nCoord = _patchCoords[i].st.size() / 2;
             __declspec( align(64) ) float u[nCoord];
             __declspec( align(64) ) float v[nCoord];        
         
             for(int n=0; n<nCoord; n++) {
-                u[n] = _patchCoords[i + n].s;
-                v[n] = _patchCoords[i + n].t;            
+                u[n] = _patchCoords[i].st[2*n  ];
+                v[n] = _patchCoords[i].st[2*n+1];            
             }
         
             if (patchType == Far::PatchDescriptor::REGULAR) {
@@ -283,35 +272,26 @@ public:
         // we use the assignment for each field instead of the assignment for 
         // the whole struct
         ispc::BufferDescriptor ispcSrcDesc, ispcDstDesc, ispcDuDesc, ispcDvDesc;
-        ispcSrcDesc.offset = _srcDesc.offset;
         ispcSrcDesc.length = _srcDesc.length;
         ispcSrcDesc.stride = _srcDesc.stride;                                           
-                          
-        uint i = r.begin();
                                        
-        ispcDstDesc.offset = _dstDesc.offset + _dstDesc.offset + i * _dstDesc.stride;
         ispcDstDesc.length = _dstDesc.length;
         ispcDstDesc.stride = _dstDesc.stride;
     
-        ispcDuDesc.offset  = _duDesc.offset  + i * _duDesc.stride;
         ispcDuDesc.length  = _duDesc.length;
         ispcDuDesc.stride  = _duDesc.stride;
     
-        ispcDvDesc.offset  = _dvDesc.offset  + i * _dvDesc.stride;
         ispcDvDesc.length  = _dvDesc.length;
         ispcDvDesc.stride  = _dvDesc.stride;
     
-        while (i < r.end()) {
-            // the patch coordinates are sorted by patch handle
-            // the following code searches the coordinates that
-            // belongs to the same patch so that they can be evalauated 
-            // with ISPC
-            int nCoord = 1;
-            Far::PatchTable::PatchHandle handle = _patchCoords[i].handle;
-            while(i + nCoord < r.end() && 
-                  handle == _patchCoords[i + nCoord].handle )
-                  nCoord ++;
+        for (uint i=r.begin(); i < r.end(); i++) {
+        
+
+            ispcDstDesc.offset = _dstDesc.offset + _patchCoords[i].offset * _dstDesc.stride;
+            ispcDuDesc.offset  = _duDesc.offset  + _patchCoords[i].offset * _duDesc.stride;               
+            ispcDvDesc.offset  = _dvDesc.offset  + _patchCoords[i].offset * _dvDesc.stride;          
               
+            const Far::PatchTable::PatchHandle &handle = _patchCoords[i].handle;              
             PatchArray const &array = _patchArrays[handle.arrayIndex];
             int patchType = array.GetPatchType();
             Far::PatchParam const & param = _patchParamBuffer[handle.patchIndex];
@@ -320,12 +300,13 @@ public:
 
             const int *cvs = &_patchIndexBuffer[array.indexBase + handle.vertIndex];
 
+            int nCoord = _patchCoords[i].st.size() / 2;
             __declspec( align(64) ) float u[nCoord];
             __declspec( align(64) ) float v[nCoord];        
         
             for(int n=0; n<nCoord; n++) {
-                u[n] = _patchCoords[i + n].s;
-                v[n] = _patchCoords[i + n].t;            
+                u[n] = _patchCoords[i].st[2*n  ];
+                v[n] = _patchCoords[i].st[2*n+1];            
             }
         
             if (patchType == Far::PatchDescriptor::REGULAR) {
@@ -339,12 +320,7 @@ public:
                                ispcDstDesc, _dst, ispcDuDesc, _du, ispcDvDesc, _dv);           
             } else {
                 assert(0);
-            }
-        
-            i += nCoord;
-            ispcDstDesc.offset = _dstDesc.offset + i * _dstDesc.stride;                                                  
-            ispcDuDesc.offset  = _duDesc.offset  + i * _duDesc.stride;               
-            ispcDvDesc.offset  = _dvDesc.offset  + i * _dvDesc.stride;               
+            }             
         }
     }
 };

@@ -29,8 +29,11 @@
 #include <osd/cpuVertexBuffer.h>
 #include <osd/cpuPatchTable.h>
 #include <osd/mesh.h>
+#include <osd/ispcEvalLimitKernel.isph>
 
 using namespace OpenSubdiv;
+
+//#include </opt/intel/vtune_amplifier_xe/include/ittnotify.h>
 
 #include "../../regression/common/far_utils.h"
 #include "../common/simple_math.h"
@@ -44,6 +47,8 @@ using namespace OpenSubdiv;
 #include <iostream>
 #include <fstream>
 #include <sstream>
+
+//#define RNEDER_SCENE
 
 void initScene(const float *vertexBuffer, const unsigned int *indexBuffer,  int nTriangle, int nVertex);
 
@@ -77,6 +82,20 @@ unsigned int *g_frameBuffer = NULL;
 
 // geometry
 std::vector<float> g_orgPositions;
+
+Far::PatchTable const *g_patchTable = NULL;
+
+// tessellated mesh
+std::vector<unsigned int>    g_triangleIndexBuffer;
+std::vector<float>           g_normalBuffer;
+std::vector<Osd::PatchCoord> g_patchCoordBuffer;
+int g_nSamplePoints = 0;
+int g_totalPatches = 0;
+
+int g_level = 2;
+int g_tessLevel = 4;
+int g_tessLevelMin = 1;
+float g_moveScale = 0.0f;
 
 // input and output vertex data
 class EvalOutputBase {
@@ -194,6 +213,7 @@ public:
             _patchTable, evalInstance, _deviceContext);
     }
     virtual void EvalPatchesWithDerivatives() {
+    /*
         EVALUATOR const *evalInstance = OpenSubdiv::Osd::GetEvaluator<EVALUATOR>(
             _evaluatorCache, _srcDesc, _vertexDesc, _duDesc, _dvDesc, _deviceContext);
         EVALUATOR::EvalPatches(
@@ -201,9 +221,83 @@ public:
             _vertexData, _vertexDesc,
             _derivatives, _duDesc,
             _derivatives, _dvDesc,
-            _patchCoords->GetNumVertices(),
-            _patchCoords,
+            g_patchCoordBuffer.size(),
+            &g_patchCoordBuffer[0],
             _patchTable, evalInstance, _deviceContext);
+            */
+        // Copy BufferDescriptor to ispc version
+        // Since memory alignment in ISPC may be different from C++,
+        // we use the assignment for each field instead of the assignment for 
+        // the whole struct
+        //__itt_resume();
+        
+        ispc::BufferDescriptor ispcSrcDesc;
+        ispcSrcDesc.length = _srcDesc.length;
+        ispcSrcDesc.stride = _srcDesc.stride;      
+        ispcSrcDesc.offset = _srcDesc.offset;                                     
+
+                    
+        float *src = _srcData->BindCpuBuffer();
+        float *dev = _derivatives->BindCpuBuffer();
+        float *dst = _vertexData->BindCpuBuffer();
+        
+        const Osd::PatchParam *_patchParamBuffer = _patchTable->GetPatchParamBuffer();
+        const int *_patchIndexBuffer  = _patchTable->GetPatchIndexBuffer();
+        const Osd::PatchArray *_patchArray = _patchTable->GetPatchArrayBuffer();
+        printf("coord size = %d\n", (int)g_patchCoordBuffer.size());
+        tbb::blocked_range<int> range = tbb::blocked_range<int>(0, g_patchCoordBuffer.size());
+        tbb::parallel_for(range, [&](const tbb::blocked_range<int> &r)
+        {            
+//          for(int i=0; i<g_patchCoordBuffer.size(); i++) {
+            ispc::BufferDescriptor ispcDstDesc, ispcDuDesc, ispcDvDesc;
+            ispcDstDesc.length = _vertexDesc.length;
+            ispcDstDesc.stride = _vertexDesc.stride;
+    
+            ispcDuDesc.length  = _duDesc.length;
+            ispcDuDesc.stride  = _duDesc.stride;
+    
+            ispcDvDesc.length  = _dvDesc.length;
+            ispcDvDesc.stride  = _dvDesc.stride;
+            
+            for (uint i=r.begin(); i < r.end(); i++) {
+                ispcDstDesc.offset = _vertexDesc.offset + g_patchCoordBuffer[i].offset * _vertexDesc.stride;
+                ispcDuDesc.offset  = _duDesc.offset  + g_patchCoordBuffer[i].offset * _duDesc.stride;               
+                ispcDvDesc.offset  = _dvDesc.offset  + g_patchCoordBuffer[i].offset * _dvDesc.stride;          
+              
+                const Far::PatchTable::PatchHandle &handle = g_patchCoordBuffer[i].handle;              
+                Osd::PatchArray const &array = _patchArray[handle.arrayIndex];
+                int patchType = array.GetPatchType();
+                Far::PatchParam const & param = _patchParamBuffer[handle.patchIndex];
+
+                unsigned int bitField = param.field1;
+
+                const int *cvs = &_patchIndexBuffer[array.indexBase + handle.vertIndex];
+
+                int nCoord = g_patchCoordBuffer[i].st.size() / 2;
+                __declspec( align(64) ) float u[nCoord];
+                __declspec( align(64) ) float v[nCoord];        
+        
+                for(int n=0; n<nCoord; n++) {
+                    u[n] = g_patchCoordBuffer[i].st[2*n  ];
+                    v[n] = g_patchCoordBuffer[i].st[2*n+1];            
+                }
+        
+                if (patchType == Far::PatchDescriptor::REGULAR) {
+                    ispc::evalBSpline(bitField, nCoord, u, v, cvs, ispcSrcDesc, src, 
+                              ispcDstDesc, dst, ispcDuDesc, dev, ispcDvDesc, dev);
+                } else if (patchType == Far::PatchDescriptor::GREGORY_BASIS) {
+                     ispc::evalGregory(bitField, nCoord, u, v, cvs, ispcSrcDesc, src, 
+                               ispcDstDesc, dst, ispcDuDesc, dev, ispcDvDesc, dev);        
+                } else if (patchType == Far::PatchDescriptor::QUADS) {
+                     ispc::evalBilinear(bitField, nCoord, u, v, cvs, ispcSrcDesc, src, 
+                               ispcDstDesc, dst, ispcDuDesc, dev, ispcDvDesc, dev);           
+                } else {
+                    assert(0);
+                }             
+            }
+        });          
+        
+        //__itt_pause();
     }
     virtual void EvalPatchesVarying() {
         EVALUATOR const *evalInstance = OpenSubdiv::Osd::GetEvaluator<EVALUATOR>(
@@ -219,6 +313,7 @@ public:
     }
     virtual void UpdatePatchCoords(
         std::vector<Osd::PatchCoord> const &patchCoords) {
+        /*
         if (_patchCoords and
             _patchCoords->GetNumVertices() != (int)patchCoords.size()) {
             delete _patchCoords;
@@ -230,6 +325,7 @@ public:
                                                       _deviceContext);
         }
         _patchCoords->UpdateData((float*)&patchCoords[0], 0, (int)patchCoords.size(), _deviceContext);
+        */
     }
 private:
     SRC_VERTEX_BUFFER *_srcData;
@@ -254,20 +350,7 @@ private:
     DEVICE_CONTEXT *_deviceContext;
 };
 
-Far::PatchTable const *g_patchTable = NULL;
 EvalOutputBase        *g_evalOutput = NULL;
-
-// tessellated mesh
-std::vector<unsigned int>    g_triangleIndexBuffer;
-std::vector<float>           g_normalBuffer;
-std::vector<Osd::PatchCoord> g_patchCoordBuffer;
-int g_nSamplePoints = 0;
-int g_totalPatches = 0;
-
-int g_level = 2;
-int g_tessLevel = 4;
-int g_tessLevelMin = 1;
-float g_moveScale = 0.0f;
 
 struct Transform {
     float ModelViewMatrix[16];
@@ -379,23 +462,33 @@ int setupPatchTessellation()
                     g_triangleIndexBuffer.push_back(vertIndex + m     * nSample + n + 1);
                 }
             vertIndex += nSample * nSample;  
+            Osd::PatchCoord coord;
+            coord.handle = handle;            
+            coord.st.resize(nSample * nSample * 2);
+            int id = 0;
             for(int m=0; m<nSample; m++) 
                 for(int n=0; n<nSample; n++) {
                     float u = (float)m / (float)(nSample -1);
                     float v = (float)n / (float)(nSample -1);                            
                     // convert to control face level UV since PatchCoord is in that space
                     patchParam.Denormalize(u, v);
-                    Osd::PatchCoord coord;
-                    coord.handle = handle;
-                    coord.s = u;
-                    coord.t = v;
-                      
-                    g_patchCoordBuffer.push_back(coord);
+
+                    coord.st[id++] = u;
+                    coord.st[id++] = v;
                 }                
+            
+            g_patchCoordBuffer.push_back(coord);
         }
     }  
     
+    int offset = 0;
+    for(int i=0; i<g_patchCoordBuffer.size(); i++) {
+        g_patchCoordBuffer[i].offset = offset;
+        offset += g_patchCoordBuffer[i].st.size() / 2;
+    }
+    
     g_normalBuffer.resize(vertIndex * 3);
+    
     
     return vertIndex;
 }
@@ -481,6 +574,7 @@ createOsdMesh(ShapeDesc const & shapeDesc, int level) {
     
     updateGeom();
         
+#ifdef RNEDER_SCENE        
     const float *pVertex = g_evalOutput->GetVertexData();
     initScene(pVertex, &g_triangleIndexBuffer[0],g_triangleIndexBuffer.size() / 3, g_nSamplePoints);
     
@@ -491,8 +585,9 @@ createOsdMesh(ShapeDesc const & shapeDesc, int level) {
     fp = fopen("index_buffer", "w");
     fwrite(&g_triangleIndexBuffer[0], g_triangleIndexBuffer.size() * sizeof(int), 1, fp);
     fclose(fp);
-   // updateScene(pVertex, &g_triangleIndexBuffer[0], &g_normalBuffer[0], 
-     //           g_triangleIndexBuffer.size()/3, g_nSamplePoints);
+    updateScene(pVertex, &g_triangleIndexBuffer[0], &g_normalBuffer[0], 
+                g_triangleIndexBuffer.size()/3, g_nSamplePoints);
+#endif                
                 
     // compute model bounding
     float min[3] = { FLT_MAX,  FLT_MAX,  FLT_MAX};
@@ -555,7 +650,9 @@ display() {
     float vz[3] = {0.0f, 0.0f, 1.0f};
     applyRotation(vz, g_transformData.ModelViewInverseMatrix);      
     
-  //  renderScene(g_frameBuffer, g_width, g_height, eye, vx, vy, vz, 45.0f, 0.1f, 0);
+#ifdef RNEDER_SCENE    
+    renderScene(g_frameBuffer, g_width, g_height, eye, vx, vy, vz, 45.0f, 0.1f, 0);
+#endif    
 }
 
 //------------------------------------------------------------------------------

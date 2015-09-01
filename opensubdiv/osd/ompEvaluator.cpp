@@ -148,15 +148,15 @@ OmpEvaluator::EvalPatches(
         int numControlVertices = 0;
         if (patchType == Far::PatchDescriptor::REGULAR) {
             Far::internal::GetBSplineWeights(param,
-                                             coord.s, coord.t, wP, wDs, wDt);
+                                             coord.st[0], coord.st[1], wP, wDs, wDt);
             numControlVertices = 16;
         } else if (patchType == Far::PatchDescriptor::GREGORY_BASIS) {
             Far::internal::GetGregoryWeights(param,
-                                             coord.s, coord.t, wP, wDs, wDt);
+                                             coord.st[0], coord.st[1], wP, wDs, wDt);
             numControlVertices = 20;
         } else if (patchType == Far::PatchDescriptor::QUADS) {
             Far::internal::GetBilinearWeights(param,
-                                              coord.s, coord.t, wP, wDs, wDt);
+                                              coord.st[0], coord.st[1], wP, wDs, wDt);
             numControlVertices = 4;
         } else {
             continue;
@@ -209,15 +209,15 @@ OmpEvaluator::EvalPatches(
         int numControlVertices = 0;
         if (patchType == Far::PatchDescriptor::REGULAR) {
             Far::internal::GetBSplineWeights(param,
-                                             coord.s, coord.t, wP, wDs, wDt);
+                                             coord.st[0], coord.st[1], wP, wDs, wDt);
             numControlVertices = 16;
         } else if (patchType == Far::PatchDescriptor::GREGORY_BASIS) {
             Far::internal::GetGregoryWeights(param,
-                                             coord.s, coord.t, wP, wDs, wDt);
+                                             coord.st[0], coord.st[1], wP, wDs, wDt);
             numControlVertices = 20;
         } else if (patchType == Far::PatchDescriptor::QUADS) {
             Far::internal::GetBilinearWeights(param,
-                                              coord.s, coord.t, wP, wDs, wDt);
+                                              coord.st[0], coord.st[1], wP, wDs, wDt);
             numControlVertices = 4;
         } else {
             continue;

@@ -48,17 +48,25 @@ struct PatchCoord {
     ///
     /// @param tArg         parametric location on the patch
     ///
-    PatchCoord(Far::PatchTable::PatchHandle handleArg, float sArg, float tArg) :
-        handle(handleArg), s(sArg), t(tArg) { }
+    PatchCoord(Far::PatchTable::PatchHandle handleArg, 
+               std::vector<float>          &stArg, 
+               int                          offset) :
+        handle(handleArg),
+        st(stArg),
+        offset(offset)
+    { 
+    }
 
-    PatchCoord() : s(0), t(0) {
-        handle.arrayIndex = 0;
-        handle.patchIndex = 0;
-        handle.vertIndex = 0;
+    PatchCoord() {
+        handle.arrayIndex  = 0;
+        handle.patchIndex  = 0;
+        handle.vertIndex   = 0;
+        offset = 0;
     }
 
     Far::PatchTable::PatchHandle handle; ///< patch handle
-    float s, t;              ///< parametric location on patch
+    std::vector<float>           st;     ///< parametric location on patch
+    int                          offset;
 };
 
 struct PatchArray {

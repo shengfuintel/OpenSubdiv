@@ -135,11 +135,13 @@ TbbEvaluator::Synchronize(void *) {
 /* static */
 void
 TbbEvaluator::SetNumThreads(int numThreads) {
+/*
     if (numThreads == -1) {
         tbb::task_scheduler_init init;
     } else {
         tbb::task_scheduler_init init(numThreads);
     }
+    */
 }
 
 }  // end namespace Osd
