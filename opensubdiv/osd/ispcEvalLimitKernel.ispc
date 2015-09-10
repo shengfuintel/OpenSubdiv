@@ -137,7 +137,7 @@ inline void cross(struct Point &a, struct Point &b, struct Point &c)
 inline uniform bool
 nonQuadRoot(uniform unsigned int bitField) 
 {
-    return (bitField >> 3) & 0x1;
+    return (bitField >> 4) & 0x1;
 }
 
 inline uniform unsigned int getU(uniform unsigned int bitField) 
@@ -296,41 +296,44 @@ evalBilinear(uniform unsigned int                  bitField,
             pVertex += 3;
         }
     }        
-                 
-    foreach( n = 0 ... nPoint) {        
-        float ou   = 1.0f - u[n];
-        float ov   = 1.0f - v[n];
-        float w[4] = { ov*ou, v[n]*ou, v[n]*u[n], ov*u[n] };
-                
-        float *pOutQ   = outQ   + outDesc.offset + n * outDesc.stride;        
+       
+    uniform float frac = getParamFraction(bitField);
+
+    // top left corner
+    uniform float pu = (uniform float)getU(bitField)*frac;
+    uniform float pv = (uniform float)getV(bitField)*frac;
+    uniform float dScale = (float)(1 << getDepth(bitField));
+            
+    foreach( n = 0 ... nPoint) {  
+        // normalize u,v coordinates
+        float s = (u[n] - pu) / frac;
+        float t = (v[n] - pv) / frac;
+                  
+        float sC   = 1.0f - s;
+        float tC   = 1.0f - t;
+        float w[4] = { sC * tC, s*tC, s*t, sC*t };
+        float derivS[4] = {-tC * dScale, tC * dScale, t * dScale, -t * dScale};
+        float derivT[4] = {-sC * dScale, -s * dScale, s * dScale, sC * dScale};        
+                     
+        float *pOutQ   = outQ   + outDesc.offset + n * outDesc.stride;     
+        float *pOutDQU = outDQU +  duDesc.offset  + n *  duDesc.stride;     
+        float *pOutDQV = outDQV +  dvDesc.offset  + n *  dvDesc.stride;                                           
         for(uniform int c=0; c<nChannel; c++) { 
-            Point Q;
-            Q.x = Q.y = Q.z = 0.0;
+            Point Q, dQdU, dQdV;
+            Q.x    = Q.y    = Q.z    = 0.0;
+            dQdU.x = dQdU.y = dQdU.z = 0.0;
+            dQdV.x = dQdV.y = dQdV.z = 0.0;                
             for (uniform int i=0; i<4; ++i) {
-                Q = Q + w[i] * controlVertices[c * 4 + i];              
+                Q    = Q    + w[i]      * controlVertices[c * 4 + i];              
+                dQdU = dQdU + derivS[i] * controlVertices[c * 4 + i];
+                dQdV = dQdV + derivT[i] * controlVertices[c * 4 + i];                                                  
             }    
               
-            *pOutQ ++ = Q.x, *pOutQ ++ = Q.y, *pOutQ ++ = Q.z;
+            *pOutQ   ++ = Q.x,    *pOutQ   ++ = Q.y,    *pOutQ   ++ = Q.z;
+            *pOutDQU ++ = dQdU.x, *pOutDQU ++ = dQdU.y, *pOutDQU ++ = dQdU.z;
+            *pOutDQV ++ = dQdV.x, *pOutDQV ++ = dQdV.y, *pOutDQV ++ = dQdV.z;            
         }        
-    }
-    
-    uniform Point dU[MAX_CHANNEL], dV[MAX_CHANNEL];
-    for(uniform int c=0; c<nChannel; c++) { 
-        dU[c] = 0.5 * (controlVertices[c * 4 + 3] - controlVertices[c * 4 + 0] +
-                       controlVertices[c * 4 + 2] - controlVertices[c * 4 + 1]  );
-                       
-        dV[c] = 0.5 * (controlVertices[c * 4 + 1] - controlVertices[c * 4 + 0] +
-                       controlVertices[c * 4 + 2] - controlVertices[c * 4 + 3]  );                       
-    }    
-    
-    foreach( n = 0 ... nPoint) {
-        float *pOutDQU = outDQU +  duDesc.offset  + n *  duDesc.stride;     
-        float *pOutDQV = outDQV +  dvDesc.offset  + n *  dvDesc.stride;           
-        for(uniform int c=0; c<nChannel; c++) { 
-            *pOutDQU ++ = dU[c].x, *pOutDQU ++ = dU[c].y, *pOutDQU ++ = dU[c].z;
-            *pOutDQV ++ = dV[c].x, *pOutDQV ++ = dV[c].y, *pOutDQV ++ = dV[c].z;            
-        }
-    }    
+    } 
 }   
 
 export void
@@ -359,23 +362,34 @@ evalBilinearNoDerivative(uniform unsigned int                  bitField,
             pVertex += 3;
         }
     }        
-                 
-    foreach( n = 0 ... nPoint) {        
-        float ou   = 1.0f - u[n];
-        float ov   = 1.0f - v[n];
-        float w[4] = { ov*ou, v[n]*ou, v[n]*u[n], ov*u[n] };
-                
-        float *pOutQ   = outQ   + outDesc.offset + n * outDesc.stride;        
+       
+    uniform float frac = getParamFraction(bitField);
+
+    // top left corner
+    uniform float pu = (uniform float)getU(bitField)*frac;
+    uniform float pv = (uniform float)getV(bitField)*frac;
+    uniform float dScale = (float)(1 << getDepth(bitField));
+            
+    foreach( n = 0 ... nPoint) {  
+        // normalize u,v coordinates
+        float s = (u[n] - pu) / frac;
+        float t = (v[n] - pv) / frac;
+                  
+        float sC   = 1.0f - s;
+        float tC   = 1.0f - t;
+        float w[4] = { sC * tC, s*tC, s*t, sC*t };
+                     
+        float *pOutQ   = outQ   + outDesc.offset + n * outDesc.stride;                                        
         for(uniform int c=0; c<nChannel; c++) { 
             Point Q;
-            Q.x = Q.y = Q.z = 0.0;
+            Q.x    = Q.y    = Q.z    = 0.0;         
             for (uniform int i=0; i<4; ++i) {
-                Q = Q + w[i] * controlVertices[c * 4 + i];              
+                Q    = Q    + w[i]      * controlVertices[c * 4 + i];                                              
             }    
               
-            *pOutQ ++ = Q.x, *pOutQ ++ = Q.y, *pOutQ ++ = Q.z;
+            *pOutQ   ++ = Q.x,    *pOutQ   ++ = Q.y,    *pOutQ   ++ = Q.z;       
         }        
-    }
+    } 
 }   
 
 export void
@@ -794,10 +808,10 @@ evalGregory(uniform   unsigned int            bitField,
         
         float *pOutQ = outQ + outDesc.offset + n * outDesc.stride;             
         for(uniform int c=0; c<nChannel; c++) { 
-            uniform int offset = c * 16;
+            uniform int offset = c * 20;
             Point Q;
             Q.x = Q.y = Q.z = 0.0;
-            for (uniform int i=0; i<16; ++i) {
+            for (uniform int i=0; i<20; ++i) {
                 Q = Q + point[i] * controlVertices[offset + i];                            
             }    
               
