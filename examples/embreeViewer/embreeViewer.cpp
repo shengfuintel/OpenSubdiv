@@ -471,6 +471,7 @@ int setupPatchTessellation()
                     g_triangleIndexBuffer.push_back(vertIndex + m     * nSample + n + 1);
                 }
             vertIndex += nSample * nSample;  
+            /*
             for(int m=0; m<nSample; m++) 
                 for(int n=0; n<nSample; n++) {
                     float u = (float)m / (float)(nSample -1);
@@ -483,7 +484,24 @@ int setupPatchTessellation()
                     coord.t = v;
                       
                     g_patchCoordBuffer.push_back(coord);
+                }   
+              */  
+            Osd::PatchCoord coord;
+            coord.handle = handle;            
+            coord.st.resize(nSample * nSample * 2);
+            int id = 0;
+            for(int m=0; m<nSample; m++) 
+                for(int n=0; n<nSample; n++) {
+                    float u = (float)m / (float)(nSample -1);
+                    float v = (float)n / (float)(nSample -1);                            
+                    // convert to control face level UV since PatchCoord is in that space
+                    patchParam.Denormalize(u, v);
+
+                    coord.st[id++] = u;
+                    coord.st[id++] = v;
                 }                
+            
+            g_patchCoordBuffer.push_back(coord);                             
         }
     }  
     

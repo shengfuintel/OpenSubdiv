@@ -48,7 +48,7 @@ using namespace OpenSubdiv;
 #include <fstream>
 #include <sstream>
 
-//#define RNEDER_SCENE
+#define RNEDER_SCENE
 
 void initScene(const float *vertexBuffer, const unsigned int *indexBuffer,  int nTriangle, int nVertex);
 
