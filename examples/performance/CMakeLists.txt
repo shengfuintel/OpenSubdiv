@@ -39,7 +39,8 @@ include_directories("${TBB_LOCATION}/include")
 include_directories("${CMAKE_CURRENT_BINARY_DIR}")
 
 _add_executable(performance
-    performance.cpp embreeRender.cpp 
+    performance.cpp 
+#    embreeRender.cpp 
     "${SHADER_FILES}"
     "${INC_FILES}"
     $<TARGET_OBJECTS:regression_common_obj>
@@ -47,8 +48,8 @@ _add_executable(performance
 )
 
 target_link_libraries(performance
-    ${PLATFORM_LIBRARIES}
-   "${EMBREE_LOCATION}/lib/libembree.so.2"
+     ${PLATFORM_LIBRARIES}
+#   "${EMBREE_LOCATION}/lib/libembree.so.2"
 )
 
 install(TARGETS performance DESTINATION "${CMAKE_BINDIR_BASE}")
