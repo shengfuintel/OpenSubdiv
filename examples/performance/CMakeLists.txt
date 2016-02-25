@@ -24,6 +24,7 @@
 
 # *** embreeViewer ***
 add_definitions("-std=c++11")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -lrt")
 
 include_directories(
     "${OPENSUBDIV_INCLUDE_DIR}"
