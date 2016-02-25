@@ -76,6 +76,7 @@ MACRO (ispc_compile)
             COMMAND  ${ISPC_DIR}/ispc  
             --pic
             -O1
+            -g
             --wno-perf
             --woff
             -h ${ISPC_TARGET_DIR}/${fname}_ispc.h

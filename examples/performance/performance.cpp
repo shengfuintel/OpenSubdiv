@@ -33,7 +33,7 @@
 
 using namespace OpenSubdiv;
 
-//#include </opt/intel/vtune_amplifier_xe/include/ittnotify.h>
+#include </opt/intel/vtune_amplifier_xe/include/ittnotify.h>
 
 #include "../../regression/common/far_utils.h"
 #include "../common/simple_math.h"
@@ -48,7 +48,7 @@ using namespace OpenSubdiv;
 #include <fstream>
 #include <sstream>
 
-#define RNEDER_SCENE
+//#define RNEDER_SCENE
 
 void initScene(const float *vertexBuffer, const unsigned int *indexBuffer,  int nTriangle, int nVertex);
 
@@ -92,7 +92,7 @@ std::vector<Osd::PatchCoord> g_patchCoordBuffer;
 int g_nSamplePoints = 0;
 int g_totalPatches = 0;
 
-int g_level = 2;
+int g_level = 4;
 int g_tessLevel = 4;
 int g_tessLevelMin = 1;
 float g_moveScale = 0.0f;
@@ -450,7 +450,7 @@ int setupPatchTessellation()
             else
                 tessLevel = maxTessLevel - depth;
              
-            int nSample = (1 << tessLevel) + 1;
+            int nSample = (1 << tessLevel);
             for(int m=0; m<nSample-1; m++) 
                 for(int n=0; n<nSample-1; n++) {
                     g_triangleIndexBuffer.push_back(vertIndex + m     * nSample + n    );
@@ -462,6 +462,8 @@ int setupPatchTessellation()
                     g_triangleIndexBuffer.push_back(vertIndex + m     * nSample + n + 1);
                 }
             vertIndex += nSample * nSample;  
+            //printf("nSample = %d\n", nSample);
+            
             Osd::PatchCoord coord;
             coord.handle = handle;            
             coord.st.resize(nSample * nSample * 2);
@@ -480,6 +482,8 @@ int setupPatchTessellation()
             g_patchCoordBuffer.push_back(coord);
         }
     }  
+    
+    printf("total number of patches = %d\n", g_totalPatches);
     
     int offset = 0;
     for(int i=0; i<g_patchCoordBuffer.size(); i++) {

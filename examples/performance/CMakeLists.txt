@@ -30,7 +30,7 @@ include_directories(
 )
 
 list(APPEND PLATFORM_LIBRARIES
-    "${OSD_LINK_TARGET}"
+    osd_static_cpu
 )
 
 include_directories("${EMBREE_LOCATION}/include")
@@ -39,16 +39,14 @@ include_directories("${TBB_LOCATION}/include")
 include_directories("${CMAKE_CURRENT_BINARY_DIR}")
 
 _add_executable(performance
-    performance.cpp embreeRender.cpp 
-    "${SHADER_FILES}"
-    "${INC_FILES}"
-    $<TARGET_OBJECTS:regression_common_obj>
-    $<TARGET_OBJECTS:regression_far_utils_obj>
+    performance.cpp 
+    shape_utils.cpp
 )
 
 target_link_libraries(performance
-    ${PLATFORM_LIBRARIES}
-   "${EMBREE_LOCATION}/lib/libembree.so.2"
+     ${PLATFORM_LIBRARIES}
+#     /opt/intel/vtune_amplifier_xe/lib64/libittnotify.a
+#   "${EMBREE_LOCATION}/lib/libembree.so.2"
 )
 
 install(TARGETS performance DESTINATION "${CMAKE_BINDIR_BASE}")

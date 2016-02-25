@@ -25,6 +25,6 @@
 add_subdirectory(common)
 
 add_subdirectory(performance)
-add_subdirectory(embreeViewer)
+#add_subdirectory(embreeViewer)
 #add_subdirectory(display)
 

@@ -62,7 +62,7 @@ _add_glfw_executable(embreeViewer
 
 target_link_libraries(embreeViewer
     ${PLATFORM_LIBRARIES}
-    "${EMBREE_LOCATION}/lib/libembree.so.2"
+    "${EMBREE_LOCATION}/lib64/libembree.so.2"
 )
 
 install(TARGETS embreeViewer DESTINATION "${CMAKE_BINDIR_BASE}")
