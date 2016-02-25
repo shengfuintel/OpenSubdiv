@@ -33,7 +33,7 @@
 
 using namespace OpenSubdiv;
 
-#include </opt/intel/vtune_amplifier_xe/include/ittnotify.h>
+//#include </opt/intel/vtune_amplifier_xe/include/ittnotify.h>
 
 #include "../../regression/common/far_utils.h"
 #include "../common/simple_math.h"
