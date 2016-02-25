@@ -10,5 +10,6 @@
   -DISPC_LOCATION=/rel/third_party/intelispc/1.8.2                   \
   -DCMAKE_BUILD_TYPE=RELWITHDEBINFO                                  \
   -DNO_PYTHON=1                                                      \
+  -DNO_OPENGL=1                                                      \
   ..
   
