@@ -77,6 +77,7 @@ MACRO (ispc_compile)
             --pic
             -O1
             -g
+            --target=avx512knl-i32x16
             --wno-perf
             --woff
             -h ${ISPC_TARGET_DIR}/${fname}_ispc.h
