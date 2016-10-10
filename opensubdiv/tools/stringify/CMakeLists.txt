@@ -23,7 +23,7 @@
 #
 
 
-remove_definitions(-xMIC_AVX512)
+# remove_definitions(-xMIC_AVX512)
 
 _add_executable(stringify
     main.cpp
