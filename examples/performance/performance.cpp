@@ -80,20 +80,8 @@ float g_rotate[2] = {-87, 31},
       
 unsigned int *g_frameBuffer = NULL;
 
-// geometry
-std::vector<float> g_orgPositions;
-
-Far::PatchTable const *g_patchTable = NULL;
-
-// tessellated mesh
-std::vector<unsigned int>    g_triangleIndexBuffer;
-std::vector<float>           g_normalBuffer;
-std::vector<Osd::PatchCoord> g_patchCoordBuffer;
-int g_nSamplePoints = 0;
-int g_totalPatches = 0;
-
-int g_level = 4;
-int g_tessLevel = 4;
+int g_level = 2;
+int g_tessLevel = 3;
 int g_tessLevelMin = 1;
 float g_moveScale = 0.0f;
 
@@ -129,6 +117,7 @@ public:
                Far::StencilTable const *varyingStencils,
                int numCoarseVerts, int numTotalVerts, int numParticles,
                Far::PatchTable const *patchTable,
+               std::vector<Osd::PatchCoord> *patchCoordBuffer,
                EvaluatorCache *evaluatorCache = NULL,
                DEVICE_CONTEXT *deviceContext = NULL)
         : _srcDesc(       /*offset*/ 0, /*length*/ 3, /*stride*/ 3),
@@ -150,6 +139,7 @@ public:
         _varyingStencils =
             Osd::convertToCompatibleStencilTable<STENCIL_TABLE>(varyingStencils, _deviceContext);
         _evaluatorCache = evaluatorCache;
+        _patchCoordBuffer = patchCoordBuffer;
     }
     ~EvalOutput() {
         delete _srcData;
@@ -221,8 +211,8 @@ public:
             _vertexData, _vertexDesc,
             _derivatives, _duDesc,
             _derivatives, _dvDesc,
-            g_patchCoordBuffer.size(),
-            &g_patchCoordBuffer[0],
+            _patchCoordBuffer.size(),
+            &_patchCoordBuffer[0],
             _patchTable, evalInstance, _deviceContext);
             */
         // Copy BufferDescriptor to ispc version
@@ -244,11 +234,10 @@ public:
         const Osd::PatchParam *_patchParamBuffer = _patchTable->GetPatchParamBuffer();
         const int *_patchIndexBuffer  = _patchTable->GetPatchIndexBuffer();
         const Osd::PatchArray *_patchArray = _patchTable->GetPatchArrayBuffer();
-        printf("coord size = %d\n", (int)g_patchCoordBuffer.size());
-        tbb::blocked_range<int> range = tbb::blocked_range<int>(0, g_patchCoordBuffer.size());
+        tbb::blocked_range<int> range = tbb::blocked_range<int>(0, (*_patchCoordBuffer).size());
         tbb::parallel_for(range, [&](const tbb::blocked_range<int> &r)
         {            
-//          for(int i=0; i<g_patchCoordBuffer.size(); i++) {
+//          for(int i=0; i<(*_patchCoordBuffer).size(); i++) {
             ispc::BufferDescriptor ispcDstDesc, ispcDuDesc, ispcDvDesc;
             ispcDstDesc.length = _vertexDesc.length;
             ispcDstDesc.stride = _vertexDesc.stride;
@@ -260,11 +249,11 @@ public:
             ispcDvDesc.stride  = _dvDesc.stride;
             
             for (uint i=r.begin(); i < r.end(); i++) {
-                ispcDstDesc.offset = _vertexDesc.offset + g_patchCoordBuffer[i].offset * _vertexDesc.stride;
-                ispcDuDesc.offset  = _duDesc.offset  + g_patchCoordBuffer[i].offset * _duDesc.stride;               
-                ispcDvDesc.offset  = _dvDesc.offset  + g_patchCoordBuffer[i].offset * _dvDesc.stride;          
+                ispcDstDesc.offset = _vertexDesc.offset + (*_patchCoordBuffer)[i].offset * _vertexDesc.stride;
+                ispcDuDesc.offset  = _duDesc.offset  + (*_patchCoordBuffer)[i].offset * _duDesc.stride;               
+                ispcDvDesc.offset  = _dvDesc.offset  + (*_patchCoordBuffer)[i].offset * _dvDesc.stride;          
               
-                const Far::PatchTable::PatchHandle &handle = g_patchCoordBuffer[i].handle;              
+                const Far::PatchTable::PatchHandle &handle = (*_patchCoordBuffer)[i].handle;              
                 Osd::PatchArray const &array = _patchArray[handle.arrayIndex];
                 int patchType = array.GetPatchType();
                 Far::PatchParam const & param = _patchParamBuffer[handle.patchIndex];
@@ -273,13 +262,13 @@ public:
 
                 const int *cvs = &_patchIndexBuffer[array.indexBase + handle.vertIndex];
 
-                int nCoord = g_patchCoordBuffer[i].st.size() / 2;
+                int nCoord = (*_patchCoordBuffer)[i].st.size() / 2;
                 __declspec( align(64) ) float u[nCoord];
                 __declspec( align(64) ) float v[nCoord];        
         
                 for(int n=0; n<nCoord; n++) {
-                    u[n] = g_patchCoordBuffer[i].st[2*n  ];
-                    v[n] = g_patchCoordBuffer[i].st[2*n+1];            
+                    u[n] = (*_patchCoordBuffer)[i].st[2*n  ];
+                    v[n] = (*_patchCoordBuffer)[i].st[2*n+1];            
                 }
         
                 if (patchType == Far::PatchDescriptor::REGULAR) {
@@ -348,9 +337,25 @@ private:
 
     EvaluatorCache *_evaluatorCache;
     DEVICE_CONTEXT *_deviceContext;
+    std::vector<Osd::PatchCoord> *_patchCoordBuffer;
 };
 
-EvalOutputBase        *g_evalOutput = NULL;
+// geometry
+struct Geometry {
+    std::vector<float>     mOrgPositions;
+    Far::PatchTable const *mPatchTable;
+    EvalOutputBase        *mEvalOutput;
+    
+    // tessellated mesh
+    std::vector<unsigned int>    mTriangleIndexBuffer;
+    std::vector<float>           mNormalBuffer;
+    std::vector<Osd::PatchCoord> mPatchCoordBuffer;
+    
+    int mSamplePoints;
+    int mPatches;
+};
+
+std::vector<Geometry *> g_Geometries;
 
 struct Transform {
     float ModelViewMatrix[16];
@@ -367,42 +372,60 @@ struct Transform {
 //------------------------------------------------------------------------------
 static void
 updateGeom() {
-    std::vector<float> vertex;
-
-    int nverts = 0;
-    int stride = 3;
-
-    nverts = (int)g_orgPositions.size() / 3;
-    vertex.reserve(nverts*stride);
-
-    const float *p = &g_orgPositions[0];
-    for (int i = 0; i < nverts; ++i) {
-        vertex.push_back( p[0]);
-        vertex.push_back( p[1]);
-        vertex.push_back( p[2]);
-        p += 3;
-    }
-
-    // Run Compute pass to pose the control vertices ---------------------------
-
-    // update coarse vertices
-    g_evalOutput->UpdateData(&vertex[0], 0, nverts);
-
-    // Refine
+    printf("update geometry\n");
+    
     tbb::tick_count start = tbb::tick_count::now();
-    g_evalOutput->Refine();
-    tbb::tick_count end = tbb::tick_count::now();
+        
+    tbb::blocked_range<int> range = tbb::blocked_range<int>(0, g_Geometries.size());
+    tbb::parallel_for(range, [&](const tbb::blocked_range<int> &r)
+    { 
+        for(int i=r.begin(); i<r.end(); i++) { 
+            Geometry *pGeom = g_Geometries[i];
+            std::vector<float> vertex;
+
+            int nverts = 0;
+            int stride = 3;
+
+            nverts = (int)pGeom->mOrgPositions.size() / 3;
+            vertex.reserve(nverts*stride);
+
+            const float *p = &pGeom->mOrgPositions[0];
+            for (int i = 0; i < nverts; ++i) {
+                vertex.push_back( p[0]);
+                vertex.push_back( p[1]);
+                vertex.push_back( p[2]);
+                p += 3;
+            }
+
+            // Run Compute pass to pose the control vertices ---------------------------
+
+            // update coarse vertices
+            pGeom->mEvalOutput->UpdateData(&vertex[0], 0, nverts);       
+            pGeom->mEvalOutput->Refine();
+            // update patchcoord to be evaluated
+            pGeom->mEvalOutput->UpdatePatchCoords(pGeom->mPatchCoordBuffer);            
+        }
+    });    
+    
+    tbb::tick_count end = tbb::tick_count::now();   
     printf("subdivision time = %g\n", (end - start).seconds());
 
-    // update patchcoord to be evaluated
-    g_evalOutput->UpdatePatchCoords(g_patchCoordBuffer);
 
     // evaluate positions
     start = tbb::tick_count::now();
-    g_evalOutput->EvalPatchesWithDerivatives();
+    
+    tbb::parallel_for(range, [&](const tbb::blocked_range<int> &r)
+    { 
+        for(int i=r.begin(); i<r.end(); i++) { 
+            Geometry *pGeom = g_Geometries[i]; 
+            pGeom->mEvalOutput->EvalPatchesWithDerivatives();
+        }
+    });
+        
     end = tbb::tick_count::now();
     printf("patch evalation time = %g\n", (end - start).seconds());
     
+    /*
     // compute normal
     const float *derivatives = g_evalOutput->GetDerivatives();
     tbb::blocked_range<int> range = tbb::blocked_range<int>(0, g_nSamplePoints);
@@ -418,30 +441,31 @@ updateGeom() {
             normalize(n);
         }
     });
+    */
 }
 
-int setupPatchTessellation()
+int setupPatchTessellation(Geometry *pGeom)
 {
-    g_triangleIndexBuffer.clear();
-    g_patchCoordBuffer.clear();
+    pGeom->mTriangleIndexBuffer.clear();
+    pGeom->mPatchCoordBuffer.clear();
     
     int maxTessLevel = g_level + g_tessLevel;
     
     unsigned int vertIndex = 0;
-    g_totalPatches = 0;
-    for (int i=0; i<(int)g_patchTable->GetNumPatchArrays(); ++i) {
-        Far::PatchDescriptor desc = g_patchTable->GetPatchArrayDescriptor(i);
+    pGeom->mPatches = 0;
+    for (int i=0; i<(int)pGeom->mPatchTable->GetNumPatchArrays(); ++i) {
+        Far::PatchDescriptor desc = pGeom->mPatchTable->GetPatchArrayDescriptor(i);
         int nControlVertices = desc.GetNumControlVertices();
             
-        g_totalPatches += g_patchTable->GetNumPatches(i);
-        for(int j=0; j<g_patchTable->GetNumPatches(i); j++) {
+        pGeom->mPatches += pGeom->mPatchTable->GetNumPatches(i);
+        for(int j=0; j<pGeom->mPatchTable->GetNumPatches(i); j++) {
             Far::PatchTable::PatchHandle handle;
 
             handle.arrayIndex = i;
             handle.patchIndex = j;
             handle.vertIndex  = j * nControlVertices;
                 
-            Far::PatchParam patchParam = g_patchTable->GetPatchParam(i, j);
+            Far::PatchParam patchParam = pGeom->mPatchTable->GetPatchParam(i, j);
             int depth = patchParam.GetDepth();
             int tessLevel = 0;
             if( patchParam.NonQuadRoot() ) {
@@ -453,6 +477,7 @@ int setupPatchTessellation()
             int nSample = (1 << tessLevel);
             for(int m=0; m<nSample-1; m++) 
                 for(int n=0; n<nSample-1; n++) {
+                /*
                     g_triangleIndexBuffer.push_back(vertIndex + m     * nSample + n    );
                     g_triangleIndexBuffer.push_back(vertIndex + (m+1) * nSample + n    );                    
                     g_triangleIndexBuffer.push_back(vertIndex + (m+1) * nSample + n + 1);
@@ -460,9 +485,10 @@ int setupPatchTessellation()
                     g_triangleIndexBuffer.push_back(vertIndex + m     * nSample + n    );
                     g_triangleIndexBuffer.push_back(vertIndex + (m+1) * nSample + n + 1);                        
                     g_triangleIndexBuffer.push_back(vertIndex + m     * nSample + n + 1);
+                    */
                 }
             vertIndex += nSample * nSample;  
-            //printf("nSample = %d\n", nSample);
+            //printf("vertIndex = %u\n", vertIndex);
             
             Osd::PatchCoord coord;
             coord.handle = handle;            
@@ -479,28 +505,27 @@ int setupPatchTessellation()
                     coord.st[id++] = v;
                 }                
             
-            g_patchCoordBuffer.push_back(coord);
+            pGeom->mPatchCoordBuffer.push_back(coord);
         }
     }  
     
-    printf("total number of patches = %d\n", g_totalPatches);
-    
     int offset = 0;
-    for(int i=0; i<g_patchCoordBuffer.size(); i++) {
-        g_patchCoordBuffer[i].offset = offset;
-        offset += g_patchCoordBuffer[i].st.size() / 2;
+    for(int i=0; i<pGeom->mPatchCoordBuffer.size(); i++) {
+        pGeom->mPatchCoordBuffer[i].offset = offset;
+        offset += pGeom->mPatchCoordBuffer[i].st.size() / 2;
     }
     
-    g_normalBuffer.resize(vertIndex * 3);
+    pGeom->mNormalBuffer.resize(vertIndex * 3);
     
     
     return vertIndex;
 }
 
 //------------------------------------------------------------------------------
-static void
+static Geometry *
 createOsdMesh(ShapeDesc const & shapeDesc, int level) {
-
+    Geometry *pGeom = new Geometry();
+ 
     Shape * shape = Shape::parseObj(shapeDesc.data.c_str(), shapeDesc.scheme);
 
     // create Far mesh (topology)
@@ -511,7 +536,7 @@ createOsdMesh(ShapeDesc const & shapeDesc, int level) {
         OpenSubdiv::Far::TopologyRefinerFactory<Shape>::Create(*shape,
             OpenSubdiv::Far::TopologyRefinerFactory<Shape>::Options(sdctype, sdcoptions));
 
-    g_orgPositions=shape->verts;
+    pGeom->mOrgPositions=shape->verts;
 
     delete shape;
 
@@ -556,28 +581,23 @@ createOsdMesh(ShapeDesc const & shapeDesc, int level) {
         nverts = vertexStencils->GetNumControlVertices() +
             vertexStencils->GetNumStencils();
 
-        if (g_patchTable) delete g_patchTable;
-        g_patchTable = patchTable;
+        pGeom->mPatchTable = patchTable;
     }
 
     // note that for patch eval we need coarse+refined combined buffer.
     int nCoarseVertices = topologyRefiner->GetLevel(0).GetNumVertices();
 
-    int nSamplePoints = setupPatchTessellation();
-    g_nSamplePoints = nSamplePoints;
-    
-    delete g_evalOutput;
+    int nSamplePoints = setupPatchTessellation(pGeom);
+    pGeom->mSamplePoints = nSamplePoints;
 
-    g_evalOutput = new EvalOutput<Osd::CpuVertexBuffer,
+    pGeom->mEvalOutput = new EvalOutput<Osd::CpuVertexBuffer,
                                   Osd::CpuVertexBuffer,
                                   Far::StencilTable,
                                   Osd::CpuPatchTable,
                                   Osd::IspcEvaluator>
         (vertexStencils, NULL,
-         nCoarseVertices, nverts, nSamplePoints, g_patchTable);
-    
-    updateGeom();
-        
+         nCoarseVertices, nverts, nSamplePoints, pGeom->mPatchTable, &pGeom->mPatchCoordBuffer);
+            
 #ifdef RNEDER_SCENE        
     const float *pVertex = g_evalOutput->GetVertexData();
     initScene(pVertex, &g_triangleIndexBuffer[0],g_triangleIndexBuffer.size() / 3, g_nSamplePoints);
@@ -591,7 +611,6 @@ createOsdMesh(ShapeDesc const & shapeDesc, int level) {
     fclose(fp);
     updateScene(pVertex, &g_triangleIndexBuffer[0], &g_normalBuffer[0], 
                 g_triangleIndexBuffer.size()/3, g_nSamplePoints);
-#endif                
                 
     // compute model bounding
     float min[3] = { FLT_MAX,  FLT_MAX,  FLT_MAX};
@@ -609,8 +628,10 @@ createOsdMesh(ShapeDesc const & shapeDesc, int level) {
         g_size += (max[j]-min[j])*(max[j]-min[j]);
     }
     g_size = sqrtf(g_size);
-    
+#endif    
     //delete topologyRefiner;
+    
+    return pGeom;
 }
 
 inline void
@@ -682,7 +703,18 @@ int main(int argc, char ** argv) {
 
     OpenSubdiv::Far::SetErrorCallback(callbackErrorOsd);
 
-    createOsdMesh(g_defaultShapes[g_currentShape], g_level);
+    printf("create meshes\n");
+    int nSize = 68*8;
+    g_Geometries.resize(nSize);
+    tbb::blocked_range<int> range = tbb::blocked_range<int>(0, nSize);
+    tbb::parallel_for(range, [&](const tbb::blocked_range<int> &r)
+    { 
+        for(int i=r.begin(); i<r.end(); i++) {     
+            g_Geometries[i] = createOsdMesh(g_defaultShapes[0], g_level);
+        }
+    });
+    
+    updateGeom();
     
     // create frame buffer for embree rendering
     g_frameBuffer = (unsigned int *)malloc(g_width * g_height * sizeof(unsigned int));

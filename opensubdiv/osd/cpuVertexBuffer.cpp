@@ -25,6 +25,7 @@
 #include "../osd/cpuVertexBuffer.h"
 
 #include <string.h>
+#include <stdio.h>
 
 namespace OpenSubdiv {
 namespace OPENSUBDIV_VERSION {
@@ -36,12 +37,12 @@ CpuVertexBuffer::CpuVertexBuffer(int numElements, int numVertices)
       _numVertices(numVertices),
       _cpuBuffer(NULL) {
 
-    _cpuBuffer = new float[numElements * numVertices];
+    _cpuBuffer = (float*)_mm_malloc((unsigned long)numElements * (unsigned long)numVertices * sizeof(float), 64);
 }
 
 CpuVertexBuffer::~CpuVertexBuffer() {
 
-    delete[] _cpuBuffer;
+    _mm_free(_cpuBuffer);
 }
 
 CpuVertexBuffer *
