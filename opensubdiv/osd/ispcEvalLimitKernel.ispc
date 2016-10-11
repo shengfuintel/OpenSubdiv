@@ -392,7 +392,7 @@ evalBSpline(uniform unsigned int                  bitField,
             uniform float *uniform                outDQU,
             uniform const BufferDescriptor       &dvDesc,            
             uniform float *uniform                outDQV)
-{
+{  
     uniform int nChannel = inDesc.length / 3;
     assert(nChannel < MAX_CHANNEL);
     

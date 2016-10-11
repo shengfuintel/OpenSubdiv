@@ -22,9 +22,9 @@
 #   language governing permissions and limitations under the Apache License.
 #
 
-#add_subdirectory(common)
+add_subdirectory(common)
 
 add_subdirectory(performance)
 #add_subdirectory(embreeViewer)
-#add_subdirectory(display)
+add_subdirectory(display)
 
