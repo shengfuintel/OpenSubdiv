@@ -48,7 +48,7 @@ using namespace OpenSubdiv;
 #include <fstream>
 #include <sstream>
 
-//#define RNEDER_SCENE
+bool RENDER_SCENE = false;
 
 void initScene(const float *vertexBuffer, const unsigned int *indexBuffer,  int nTriangle, int nVertex);
 
@@ -235,9 +235,8 @@ public:
         const int *_patchIndexBuffer  = _patchTable->GetPatchIndexBuffer();
         const Osd::PatchArray *_patchArray = _patchTable->GetPatchArrayBuffer();
         tbb::blocked_range<int> range = tbb::blocked_range<int>(0, (*_patchCoordBuffer).size());
-        tbb::parallel_for(range, [&](const tbb::blocked_range<int> &r)
-        {            
-//          for(int i=0; i<(*_patchCoordBuffer).size(); i++) {
+//      tbb::parallel_for(range, [&](const tbb::blocked_range<int> &r)
+//      {            
             ispc::BufferDescriptor ispcDstDesc, ispcDuDesc, ispcDvDesc;
             ispcDstDesc.length = _vertexDesc.length;
             ispcDstDesc.stride = _vertexDesc.stride;
@@ -247,8 +246,8 @@ public:
     
             ispcDvDesc.length  = _dvDesc.length;
             ispcDvDesc.stride  = _dvDesc.stride;
-            
-            for (uint i=r.begin(); i < r.end(); i++) {
+            for(int i=0; i<(*_patchCoordBuffer).size(); i++) {         
+        //    for (uint i=r.begin(); i < r.end(); i++) {
                 ispcDstDesc.offset = _vertexDesc.offset + (*_patchCoordBuffer)[i].offset * _vertexDesc.stride;
                 ispcDuDesc.offset  = _duDesc.offset  + (*_patchCoordBuffer)[i].offset * _duDesc.stride;               
                 ispcDvDesc.offset  = _dvDesc.offset  + (*_patchCoordBuffer)[i].offset * _dvDesc.stride;          
@@ -284,7 +283,7 @@ public:
                     assert(0);
                 }             
             }
-        });          
+       // });          
         
         //__itt_pause();
     }
@@ -425,23 +424,22 @@ updateGeom() {
     end = tbb::tick_count::now();
     printf("patch evalation time = %g\n", (end - start).seconds());
     
-    /*
+   
     // compute normal
-    const float *derivatives = g_evalOutput->GetDerivatives();
-    tbb::blocked_range<int> range = tbb::blocked_range<int>(0, g_nSamplePoints);
-    tbb::parallel_for(range, [&](const tbb::blocked_range<int> &r)
+    const float *derivatives = g_Geometries[0]->mEvalOutput->GetDerivatives();
+    tbb::blocked_range<int> range1 = tbb::blocked_range<int>(0, g_Geometries[0]->mSamplePoints);
+    tbb::parallel_for(range1, [&](const tbb::blocked_range<int> &r)
     { 
         for(int i=r.begin(); i<r.end(); i++) { 
         //for(int i=0; i<g_nSamplePoints; i++) {
             const float *du = derivatives + i * 6;
             const float *dv = derivatives + i * 6 + 3;        
         
-            float *n = &g_normalBuffer[0] + i * 3;
+            float *n = &g_Geometries[0]->mNormalBuffer[0] + i * 3;
             cross(n, du, dv);
             normalize(n);
         }
     });
-    */
 }
 
 int setupPatchTessellation(Geometry *pGeom)
@@ -476,16 +474,18 @@ int setupPatchTessellation(Geometry *pGeom)
              
             int nSample = (1 << tessLevel);
             for(int m=0; m<nSample-1; m++) 
-                for(int n=0; n<nSample-1; n++) {
-                /*
-                    g_triangleIndexBuffer.push_back(vertIndex + m     * nSample + n    );
-                    g_triangleIndexBuffer.push_back(vertIndex + (m+1) * nSample + n    );                    
-                    g_triangleIndexBuffer.push_back(vertIndex + (m+1) * nSample + n + 1);
+                for(int n=0; n<nSample-1; n++) { 
+                    // looks like the index buffer used too much memory when lots of meshes are used
+                    // disable it if not render the scene.
+                    if(RENDER_SCENE) {            
+                        pGeom->mTriangleIndexBuffer.push_back(vertIndex + m     * nSample + n    );
+                        pGeom->mTriangleIndexBuffer.push_back(vertIndex + (m+1) * nSample + n    );                    
+                        pGeom->mTriangleIndexBuffer.push_back(vertIndex + (m+1) * nSample + n + 1);
                       
-                    g_triangleIndexBuffer.push_back(vertIndex + m     * nSample + n    );
-                    g_triangleIndexBuffer.push_back(vertIndex + (m+1) * nSample + n + 1);                        
-                    g_triangleIndexBuffer.push_back(vertIndex + m     * nSample + n + 1);
-                    */
+                        pGeom->mTriangleIndexBuffer.push_back(vertIndex + m     * nSample + n    );
+                        pGeom->mTriangleIndexBuffer.push_back(vertIndex + (m+1) * nSample + n + 1);                        
+                        pGeom->mTriangleIndexBuffer.push_back(vertIndex + m     * nSample + n + 1);          
+                    }
                 }
             vertIndex += nSample * nSample;  
             //printf("vertIndex = %u\n", vertIndex);
@@ -598,37 +598,7 @@ createOsdMesh(ShapeDesc const & shapeDesc, int level) {
         (vertexStencils, NULL,
          nCoarseVertices, nverts, nSamplePoints, pGeom->mPatchTable, &pGeom->mPatchCoordBuffer);
             
-#ifdef RNEDER_SCENE        
-    const float *pVertex = g_evalOutput->GetVertexData();
-    initScene(pVertex, &g_triangleIndexBuffer[0],g_triangleIndexBuffer.size() / 3, g_nSamplePoints);
-    
-    FILE *fp = fopen("vertex_buffer", "w");
-    fwrite(pVertex, g_nSamplePoints * sizeof(float) * 3, 1, fp);
-    fclose(fp);
 
-    fp = fopen("index_buffer", "w");
-    fwrite(&g_triangleIndexBuffer[0], g_triangleIndexBuffer.size() * sizeof(int), 1, fp);
-    fclose(fp);
-    updateScene(pVertex, &g_triangleIndexBuffer[0], &g_normalBuffer[0], 
-                g_triangleIndexBuffer.size()/3, g_nSamplePoints);
-                
-    // compute model bounding
-    float min[3] = { FLT_MAX,  FLT_MAX,  FLT_MAX};
-    float max[3] = {-FLT_MAX, -FLT_MAX, -FLT_MAX};
-    for (size_t i=0; i <g_orgPositions.size()/3; ++i) {
-        for(int j=0; j<3; ++j) {
-            float v = g_orgPositions[i*3+j];
-            min[j] = std::min(min[j], v);
-            max[j] = std::max(max[j], v);
-        }
-    }
-            
-    for (int j=0; j<3; ++j) {
-        g_center[j] = (min[j] + max[j]) * 0.5f;
-        g_size += (max[j]-min[j])*(max[j]-min[j]);
-    }
-    g_size = sqrtf(g_size);
-#endif    
     //delete topologyRefiner;
     
     return pGeom;
@@ -654,7 +624,34 @@ void renderScene(unsigned int *buffer, int width, int length,
 static void
 display() {             
     
-             
+    if(!RENDER_SCENE)
+        return;
+
+    Geometry *pGeom = g_Geometries[0];
+    const float *pVertex = pGeom->mEvalOutput->GetVertexData();
+    initScene(pVertex, &pGeom->mTriangleIndexBuffer[0],pGeom->mTriangleIndexBuffer.size() / 3, 
+             pGeom->mSamplePoints);
+
+    updateScene(pVertex, &pGeom->mTriangleIndexBuffer[0], &pGeom->mNormalBuffer[0], 
+                pGeom->mTriangleIndexBuffer.size()/3, pGeom->mSamplePoints);
+                
+    // compute model bounding
+    float min[3] = { FLT_MAX,  FLT_MAX,  FLT_MAX};
+    float max[3] = {-FLT_MAX, -FLT_MAX, -FLT_MAX};
+    for (size_t i=0; i <pGeom->mOrgPositions.size()/3; ++i) {
+        for(int j=0; j<3; ++j) {
+            float v = pGeom->mOrgPositions[i*3+j];
+            min[j] = std::min(min[j], v);
+            max[j] = std::max(max[j], v);
+        }
+    }
+            
+    for (int j=0; j<3; ++j) {
+        g_center[j] = (min[j] + max[j]) * 0.5f;
+        g_size += (max[j]-min[j])*(max[j]-min[j]);
+    }
+    g_size = sqrtf(g_size);
+
     memset(g_frameBuffer, 255, g_width * g_height * sizeof(unsigned int));    
     identity(g_transformData.ModelViewMatrix);
     translate(g_transformData.ModelViewMatrix, -g_pan[0], -g_pan[1], -g_dolly);
@@ -673,11 +670,13 @@ display() {
     float vy[3] = {0.0f, 1.0f, 0.0f};
     applyRotation(vy, g_transformData.ModelViewInverseMatrix);
     float vz[3] = {0.0f, 0.0f, 1.0f};
-    applyRotation(vz, g_transformData.ModelViewInverseMatrix);      
+    applyRotation(vz, g_transformData.ModelViewInverseMatrix);    
     
-#ifdef RNEDER_SCENE    
-    renderScene(g_frameBuffer, g_width, g_height, eye, vx, vy, vz, 45.0f, 0.1f, 0);
-#endif    
+    renderScene(g_frameBuffer, g_width, g_height, eye, vx, vy, vz, 45.0f, 0.1f, 0);    
+    
+    FILE *fp = fopen("image.bin", "w");
+    fwrite(g_frameBuffer, g_width * g_height * sizeof(unsigned int), 1, fp);
+    fclose(fp);    
 }
 
 //------------------------------------------------------------------------------
@@ -690,12 +689,13 @@ callbackErrorOsd(OpenSubdiv::Far::ErrorType err, const char *message) {
 //------------------------------------------------------------------------------
 //------------------------------------------------------------------------------
 int main(int argc, char ** argv) {
-    if(argc < 2) {
-        printf("Usage: performance nThread\n");
+    if(argc < 3) {
+        printf("Usage: performance nThread render\n");
         exit(-1);
     }
         
     int nThread = atoi(argv[1]);
+    RENDER_SCENE = (bool)atoi(argv[2]);
 
     tbb::task_scheduler_init init(nThread);
 
@@ -704,7 +704,12 @@ int main(int argc, char ** argv) {
     OpenSubdiv::Far::SetErrorCallback(callbackErrorOsd);
 
     printf("create meshes\n");
-    int nSize = 68*8;
+    int nSize = 0;
+    if( RENDER_SCENE )
+        nSize = 1;
+    else    
+        nSize = 68*8;
+    
     g_Geometries.resize(nSize);
     tbb::blocked_range<int> range = tbb::blocked_range<int>(0, nSize);
     tbb::parallel_for(range, [&](const tbb::blocked_range<int> &r)
@@ -720,10 +725,6 @@ int main(int argc, char ** argv) {
     g_frameBuffer = (unsigned int *)malloc(g_width * g_height * sizeof(unsigned int));
     
     display();
-    
-    FILE *fp = fopen("image.bin", "w");
-    fwrite(g_frameBuffer, g_width * g_height * sizeof(unsigned int), 1, fp);
-    fclose(fp);
 }
 
 //------------------------------------------------------------------------------

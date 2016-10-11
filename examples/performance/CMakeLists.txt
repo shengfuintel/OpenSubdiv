@@ -40,6 +40,7 @@ include_directories("${TBB_LOCATION}/include")
 include_directories("${CMAKE_CURRENT_BINARY_DIR}")
 
 _add_executable(performance
+    embreeRender.cpp
     performance.cpp 
     shape_utils.cpp
 )
@@ -47,7 +48,8 @@ _add_executable(performance
 target_link_libraries(performance
      ${PLATFORM_LIBRARIES}
 #     /opt/intel/vtune_amplifier_xe/lib64/libittnotify.a
-#   "${EMBREE_LOCATION}/lib/libembree.so.2"
+   "${EMBREE_LOCATION}/lib64/libembree.so.2"
+   "/usr/pic1/gcc/gcc-4.8.2-install/lib64/libstdc++.so"
 )
 
 install(TARGETS performance DESTINATION "${CMAKE_BINDIR_BASE}")

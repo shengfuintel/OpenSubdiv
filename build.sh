@@ -10,7 +10,8 @@
   -DISPC_LOCATION=/rel/third_party/intelispc/1.9.1                                                               \
   -DGLEW_LOCATION=/usr/pic1/glew-1.9.0                                                                           \
   -DGLFW_LOCATION=/usr/pic1/glfw-3.0.2                                                                           \
-  -DCMAKE_BUILD_TYPE=Debug                                                                                     \
+  -DCMAKE_BUILD_TYPE=Release                                                                                   \
   -DNO_PYTHON=1                                                                                                  \
+  -DEMBREE_LOCATION=/usr/pic1/embree/install-avx/  \
   ..
   
